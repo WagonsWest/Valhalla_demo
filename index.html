@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valhalla Navigation Demo — Kanto</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        #map { width: 100%; height: 100vh; }
+
+        .control-panel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            padding: 16px;
+            width: 320px;
+            max-height: calc(100vh - 24px);
+            overflow-y: auto;
+        }
+
+        .control-panel h2 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #1a1a2e;
+        }
+
+        .instructions {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
+        .point-display {
+            font-size: 12px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            min-height: 32px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .point-display .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot-origin { background: #22c55e; }
+        .dot-dest { background: #ef4444; }
+
+        .costing-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            cursor: pointer;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: background 0.2s;
+        }
+        .btn-route {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-route:hover { background: #2563eb; }
+        .btn-route:disabled {
+            background: #93c5fd;
+            cursor: not-allowed;
+        }
+        .btn-clear {
+            background: #f1f5f9;
+            color: #475569;
+        }
+        .btn-clear:hover { background: #e2e8f0; }
+
+        .route-info {
+            margin-top: 12px;
+            padding: 12px;
+            background: #f0fdf4;
+            border-radius: 6px;
+            border: 1px solid #bbf7d0;
+            display: none;
+        }
+        .route-info h3 {
+            font-size: 14px;
+            color: #166534;
+            margin-bottom: 8px;
+        }
+        .route-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 4px 0;
+            color: #333;
+        }
+
+        .maneuvers {
+            margin-top: 12px;
+            display: none;
+        }
+        .maneuvers h3 {
+            font-size: 14px;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+        .maneuver-item {
+            font-size: 12px;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+            color: #444;
+            line-height: 1.4;
+        }
+
+        .status-bar {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            padding: 8px 16px;
+            font-size: 13px;
+            color: #666;
+            display: none;
+        }
+        .status-bar.error { background: #fef2f2; color: #dc2626; }
+        .status-bar.success { background: #f0fdf4; color: #166534; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div class="control-panel">
+        <h2>Valhalla Route Demo</h2>
+        <p class="instructions">Click the map to set <strong>origin</strong> (1st click) and <strong>destination</strong> (2nd click), then press Route.</p>
+
+        <div class="point-display" id="originDisplay">
+            <div class="dot dot-origin"></div>
+            <span>Click map to set origin...</span>
+        </div>
+        <div class="point-display" id="destDisplay">
+            <div class="dot dot-dest"></div>
+            <span>Click map to set destination...</span>
+        </div>
+
+        <select class="costing-select" id="costingMode">
+            <option value="auto">Car</option>
+            <option value="bicycle">Bicycle</option>
+            <option value="pedestrian">Walking</option>
+            <option value="motor_scooter">Scooter</option>
+        </select>
+
+        <button class="btn btn-route" id="routeBtn" disabled>Get Route</button>
+        <button class="btn btn-clear" id="clearBtn">Clear</button>
+
+        <div class="route-info" id="routeInfo">
+            <h3>Route Summary</h3>
+            <div class="route-stat">
+                <span>Distance</span>
+                <strong id="routeDistance">—</strong>
+            </div>
+            <div class="route-stat">
+                <span>Duration</span>
+                <strong id="routeDuration">—</strong>
+            </div>
+        </div>
+
+        <div class="maneuvers" id="maneuversPanel">
+            <h3>Turn-by-Turn</h3>
+            <div id="maneuversList"></div>
+        </div>
+    </div>
+
+    <div class="status-bar" id="statusBar"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // When served via server.py, use relative URLs (proxy handles CORS)
+        // When testing directly, fall back to localhost:8002
+        const VALHALLA_URL = window.location.protocol === 'file:' ? 'http://localhost:8002' : '';
+
+        // Initialize map centered on Tokyo
+        const map = L.map('map').setView([35.6812, 139.7671], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        let origin = null;
+        let destination = null;
+        let originMarker = null;
+        let destMarker = null;
+        let routeLine = null;
+
+        const originDisplay = document.getElementById('originDisplay');
+        const destDisplay = document.getElementById('destDisplay');
+        const routeBtn = document.getElementById('routeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const routeInfo = document.getElementById('routeInfo');
+        const maneuversPanel = document.getElementById('maneuversPanel');
+        const statusBar = document.getElementById('statusBar');
+
+        const greenIcon = L.divIcon({
+            className: '',
+            html: '<div style="width:14px;height:14px;background:#22c55e;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
+        const redIcon = L.divIcon({
+            className: '',
+            html: '<div style="width:14px;height:14px;background:#ef4444;border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
+
+        // Click handler
+        map.on('click', (e) => {
+            const { lat, lng } = e.latlng;
+
+            if (!origin) {
+                origin = { lat, lon: lng };
+                if (originMarker) map.removeLayer(originMarker);
+                originMarker = L.marker([lat, lng], { icon: greenIcon }).addTo(map);
+                originDisplay.querySelector('span').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            } else if (!destination) {
+                destination = { lat, lon: lng };
+                if (destMarker) map.removeLayer(destMarker);
+                destMarker = L.marker([lat, lng], { icon: redIcon }).addTo(map);
+                destDisplay.querySelector('span').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+                routeBtn.disabled = false;
+            }
+        });
+
+        // Decode Valhalla's polyline6 format
+        function decodePolyline6(encoded) {
+            const points = [];
+            let index = 0, lat = 0, lng = 0;
+
+            while (index < encoded.length) {
+                let shift = 0, result = 0, byte;
+                do {
+                    byte = encoded.charCodeAt(index++) - 63;
+                    result |= (byte & 0x1f) << shift;
+                    shift += 5;
+                } while (byte >= 0x20);
+                lat += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+                shift = 0; result = 0;
+                do {
+                    byte = encoded.charCodeAt(index++) - 63;
+                    result |= (byte & 0x1f) << shift;
+                    shift += 5;
+                } while (byte >= 0x20);
+                lng += (result & 1) ? ~(result >> 1) : (result >> 1);
+
+                points.push([lat / 1e6, lng / 1e6]);
+            }
+            return points;
+        }
+
+        function showStatus(msg, type = '') {
+            statusBar.textContent = msg;
+            statusBar.className = 'status-bar ' + type;
+            statusBar.style.display = 'block';
+            if (type !== 'error') {
+                setTimeout(() => { statusBar.style.display = 'none'; }, 4000);
+            }
+        }
+
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${Math.round(seconds)}s`;
+            const mins = Math.floor(seconds / 60);
+            if (mins < 60) return `${mins} min`;
+            const hrs = Math.floor(mins / 60);
+            const remainMins = mins % 60;
+            return `${hrs}h ${remainMins}m`;
+        }
+
+        // Route request
+        routeBtn.addEventListener('click', async () => {
+            if (!origin || !destination) return;
+
+            routeBtn.disabled = true;
+            routeBtn.textContent = 'Routing...';
+            showStatus('Requesting route...');
+
+            const costing = document.getElementById('costingMode').value;
+
+            try {
+                const resp = await fetch(`${VALHALLA_URL}/route`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        locations: [
+                            { lat: origin.lat, lon: origin.lon },
+                            { lat: destination.lat, lon: destination.lon }
+                        ],
+                        costing: costing,
+                        directions_options: { units: 'km' }
+                    })
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json();
+                    throw new Error(err.error || `HTTP ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                const trip = data.trip;
+                const leg = trip.legs[0];
+
+                // Draw route
+                if (routeLine) map.removeLayer(routeLine);
+                const coords = decodePolyline6(leg.shape);
+                routeLine = L.polyline(coords, {
+                    color: '#3b82f6',
+                    weight: 5,
+                    opacity: 0.8
+                }).addTo(map);
+                map.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
+
+                // Show summary
+                const dist = trip.summary.length;
+                const time = trip.summary.time;
+                document.getElementById('routeDistance').textContent = dist < 1 ? `${(dist * 1000).toFixed(0)} m` : `${dist.toFixed(1)} km`;
+                document.getElementById('routeDuration').textContent = formatDuration(time);
+                routeInfo.style.display = 'block';
+
+                // Show maneuvers
+                const list = document.getElementById('maneuversList');
+                list.innerHTML = '';
+                leg.maneuvers.forEach(m => {
+                    const div = document.createElement('div');
+                    div.className = 'maneuver-item';
+                    const dist = m.length < 1 ? `${(m.length * 1000).toFixed(0)}m` : `${m.length.toFixed(1)}km`;
+                    div.textContent = `${m.instruction} (${dist})`;
+                    list.appendChild(div);
+                });
+                maneuversPanel.style.display = 'block';
+
+                showStatus('Route found!', 'success');
+
+            } catch (err) {
+                showStatus(`Error: ${err.message}`, 'error');
+                console.error('Route error:', err);
+            } finally {
+                routeBtn.disabled = false;
+                routeBtn.textContent = 'Get Route';
+            }
+        });
+
+        // Clear
+        clearBtn.addEventListener('click', () => {
+            origin = null;
+            destination = null;
+            if (originMarker) { map.removeLayer(originMarker); originMarker = null; }
+            if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+            if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+            originDisplay.querySelector('span').textContent = 'Click map to set origin...';
+            destDisplay.querySelector('span').textContent = 'Click map to set destination...';
+            routeBtn.disabled = true;
+            routeInfo.style.display = 'none';
+            maneuversPanel.style.display = 'none';
+            statusBar.style.display = 'none';
+        });
+
+        // Check server status on load
+        fetch(`${VALHALLA_URL}/status`)
+            .then(r => r.ok ? showStatus('Valhalla server connected', 'success') : showStatus('Valhalla server not ready yet', 'error'))
+            .catch(() => showStatus('Valhalla server not reachable — tiles may still be building', 'error'));
+    </script>
+</body>
+</html>

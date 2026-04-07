@@ -1,0 +1,21 @@
+# OSM data (large binary files)
+*.osm.pbf
+
+# Valhalla generated tiles and config
+valhalla_data/
+
+# Planning/session files
+task_plan.md
+findings.md
+progress.md
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+.DS_Store
